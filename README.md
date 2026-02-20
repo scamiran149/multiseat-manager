@@ -2,6 +2,9 @@
 
 Multiseat Manager is a graphical Qt desktop application for Linux that provides an intuitive interface for managing `systemd-loginctl` device assignments. It allows you to easily map GPUs, monitors, USB hubs, and input devices to specific seats to create multi-monitor, multi-user environments on a single physical machine.
 
+> [!NOTE]
+> This application is currently in an early state and has only been extensively tested on **Ubuntu 25.10**. While we hope it is useful for other distributions, please use with caution and report any issues.
+
 ## Features
 
 - **Rootless GUI:** The main interface runs unprivileged, only prompting for `pkexec` authorization when absolutely necessary (e.g., listening for raw `/dev/input/` events or applying structural changes).
