@@ -23,16 +23,19 @@ Multiseat Manager is a graphical Qt desktop application for Linux that provides 
 
 ## Installation
 
+### Standalone Binary Installation (Recommended)
+You can download the compiled standalone generic Linux binary (`multiseat-manager-v1.0.0-linux.tar.gz`) from the [Releases](https://github.com/scamiran149/multiseat-manager/releases) page. It does not require installing Python packages.
+
+1. Extract the release archive: `tar -xvf multiseat-manager-v1.0.0-linux.tar.gz`
+2. Run the system-wide application installer (requires elevation to write to `/opt/`):
+```bash
+cd multiseat-manager && sudo ./install.sh
+```
+
 ### From Source
-1. Clone the repository: `git clone https://github.com/USERNAME/multiseat-manager.git`
+1. Clone the repository: `git clone https://github.com/scamiran149/multiseat-manager.git`
 2. Run the bootstrapper: `./launch.sh` 
 *(This will automatically configure a python virtual environment, install dependencies, and launch the UI.)*
-
-### Optional Desktop Integration
-If you wish to manage Multiseat Manager from your native desktop environment's application menu:
-```bash
-make install
-```
 
 ## Review Workflow
 
