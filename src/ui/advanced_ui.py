@@ -61,16 +61,15 @@ class DraggableTree(QTreeWidget):
             return
 
         # Determine the target group
-        target_group = None
-        if hw_type == "gpu":
-            target_group = self.grp_graphics
-        elif hw_type in ["usb_hub", "usb_child"]:
-            target_group = self.grp_usb
-        elif hw_type == "input":
-            target_group = self.grp_inputs
-        elif hw_type == "av":
-            target_group = self.grp_av
-        else:
+        target_group = {
+            "gpu": self.grp_graphics,
+            "usb_hub": self.grp_usb,
+            "usb_child": self.grp_usb,
+            "input": self.grp_inputs,
+            "av": self.grp_av,
+        }.get(hw_type)
+
+        if not target_group:
             # Monitors or audio nested under monitors/gpus shouldn't be dragged independently
             event.ignore()
             return

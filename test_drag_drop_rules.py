@@ -37,7 +37,7 @@ class MockDropEvent:
 class TestDragDropToRules(unittest.TestCase):
     def setUp(self):
         self.hw_data = {
-            "graphics": [{"name": "Mock GPU", "type": "graphics", "syspath": "/sys/devices/pci1/gpu1/drm/card0", "pci_syspath": "/sys/devices/pci1/gpu1"}],
+            "graphics": [{"name": "Mock GPU", "type": "graphics", "syspath": "/sys/devices/pci0000:00/0000:00:01.0/0000:01:00.0/drm/card0", "pci_syspath": "0000:01:00"}],
             "inputs": [{"name": "Mock Input", "type": "input", "syspath": "/sys/devices/pci1/usb1/input1", "persistent_id": "input-1-id"}],
         }
         # mock current assignments empty
@@ -84,9 +84,6 @@ class TestDragDropToRules(unittest.TestCase):
             for grp in [tree.grp_graphics, tree.grp_inputs, tree.grp_av, tree.grp_usb]:
                 for i in range(grp.childCount()):
                     hw_data = grp.child(i).data(0, Qt.ItemDataRole.UserRole).get("hw", {})
-                    # Need to patch type if missing to match how the UI does it
-                    hw_type = grp.child(i).data(0, Qt.ItemDataRole.UserRole).get("type", "")
-                    hw_data["type"] = hw_type
                     staging_map[seat_name].append(hw_data)
 
         executor = ConfigExecutor()
@@ -96,10 +93,10 @@ class TestDragDropToRules(unittest.TestCase):
             rules = f.read()
 
         # Verify rules include the correct PCI syspath tagging for GPU and the nested DRM|sound tag
-        self.assertIn('DEVPATH=="/devices/pci1/gpu1"', rules)
-        self.assertIn('DEVPATH=="/devices/pci1/gpu1/*", SUBSYSTEM=="drm"', rules)
-        self.assertIn('DEVPATH=="/devices/pci1/gpu1/*", SUBSYSTEM=="graphics"', rules)
-        self.assertIn('DEVPATH=="/devices/pci1/gpu1/*", SUBSYSTEM=="sound"', rules)
+        self.assertIn('DEVPATH=="/devices/pci0000:00/0000:00:01.0/0000:01:00.0"', rules)
+        self.assertIn('DEVPATH=="/devices/pci0000:00/0000:00:01.0/0000:01:00.0/*", SUBSYSTEM=="drm"', rules)
+        self.assertIn('DEVPATH=="/devices/pci0000:00/0000:00:01.0/0000:01:00.0/*", SUBSYSTEM=="graphics"', rules)
+        self.assertIn('DEVPATH=="/devices/pci0000:00/0000:00:01.0/0000:01:00.0/*", SUBSYSTEM=="sound"', rules)
         # Verify input rule exists
         self.assertIn('DEVPATH=="/devices/pci1/usb1/input1"', rules)
 

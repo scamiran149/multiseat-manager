@@ -16,7 +16,24 @@ class ConfigExecutor:
         # Also handles 'gpu' type from UI and 'graphics' type from raw scanner
         hw_type = hw_data.get("type")
         if hw_type in ["graphics", "gpu"] and hw_data.get("pci_syspath"):
-            return hw_data.get("pci_syspath")
+            pci_id = hw_data.get("pci_syspath")
+            syspath = hw_data.get("syspath", "")
+
+            # The pci_syspath stored by the scanner is just the base PCI ID (e.g. "0000:01:00").
+            # We need to reconstruct the full sysfs path by finding where this ID exists in the full syspath.
+            if pci_id in syspath:
+                idx = syspath.find(pci_id) + len(pci_id)
+                # We need to include the function suffix (like .0) if it exists, or just use the prefix.
+                # Actually, the base PCI ID strips the .0 suffix.
+                # So if syspath is `/sys/devices/.../0000:01:00.0/drm/card0`
+                # And pci_id is `0000:01:00`, we want `/sys/devices/.../0000:01:00.0`
+                # Let's find the ID and the next '/'
+                idx = syspath.find(pci_id)
+                if idx != -1:
+                    end_idx = syspath.find('/', idx)
+                    if end_idx != -1:
+                        return syspath[:end_idx]
+                    return syspath[idx:] # fallback
         return hw_data.get("syspath")
 
     def generate_staging(self, staging_map):
@@ -46,16 +63,15 @@ class ConfigExecutor:
 
                     hw_type = hw.get("type", "")
 
+                    udev_rules.append(f'TAG=="seat", DEVPATH=="{devpath}", ENV{{ID_SEAT}}="{seat_name}"')
+
                     # If this is a GPU using a PCI syspath, we must explicitly tag related subsystems
                     # to ensure DRM, fb, and sound cards under this PCI bus are assigned to the seat.
                     if hw_type in ["graphics", "gpu"] and hw.get("pci_syspath"):
-                        udev_rules.append(f'TAG=="seat", DEVPATH=="{devpath}", ENV{{ID_SEAT}}="{seat_name}"')
                         # Catch children for drm, graphics and sound
                         udev_rules.append(f'TAG=="seat", DEVPATH=="{devpath}/*", SUBSYSTEM=="drm", ENV{{ID_SEAT}}="{seat_name}"')
                         udev_rules.append(f'TAG=="seat", DEVPATH=="{devpath}/*", SUBSYSTEM=="graphics", ENV{{ID_SEAT}}="{seat_name}"')
                         udev_rules.append(f'TAG=="seat", DEVPATH=="{devpath}/*", SUBSYSTEM=="sound", ENV{{ID_SEAT}}="{seat_name}"')
-                    else:
-                        udev_rules.append(f'TAG=="seat", DEVPATH=="{devpath}", ENV{{ID_SEAT}}="{seat_name}"')
 
         os.makedirs(self.staging_dir, exist_ok=True)
         
