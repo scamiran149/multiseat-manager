@@ -38,6 +38,67 @@ class DraggableTree(QTreeWidget):
         self.grp_av.setFlags(self.grp_av.flags() & ~Qt.ItemFlag.ItemIsDragEnabled & ~Qt.ItemFlag.ItemIsDropEnabled)
         self.grp_av.setExpanded(True)
 
+
+    def dropEvent(self, event):
+        source = event.source()
+        if not source or not hasattr(source, 'currentItem'):
+            event.ignore()
+            return
+
+        source_item = source.currentItem()
+        if not source_item:
+            event.ignore()
+            return
+
+        data = source_item.data(0, Qt.ItemDataRole.UserRole)
+        if not data:
+            event.ignore()
+            return
+
+        hw_type = data.get("type")
+        if not hw_type:
+            event.ignore()
+            return
+
+        # Determine the target group
+        target_group = None
+        if hw_type == "gpu":
+            target_group = self.grp_graphics
+        elif hw_type in ["usb_hub", "usb_child"]:
+            target_group = self.grp_usb
+        elif hw_type == "input":
+            target_group = self.grp_inputs
+        elif hw_type == "av":
+            target_group = self.grp_av
+        else:
+            # Monitors or audio nested under monitors/gpus shouldn't be dragged independently
+            event.ignore()
+            return
+
+        # Remove from source
+        source_parent = source_item.parent()
+        if source_parent:
+            # Recreate the item to avoid issues with parent taking ownership
+            # PyQt QTreeWidget drag and drop can be finicky with just changing parents
+            # But takeChild works fine for moving across trees
+
+            # Let the default implementation handle visual feedback, but intercept the actual drop
+            # Actually, standard QTreeWidget dropEvent moves the item to the position where mouse released.
+            # We want to force it to a specific group node.
+
+            # Remove item from old parent
+            index = source_parent.indexOfChild(source_item)
+            item = source_parent.takeChild(index)
+
+            # Add to proper group
+            target_group.addChild(item)
+
+            # Accept event but tell Qt we handled the action to avoid default drop behavior
+            event.setDropAction(Qt.DropAction.IgnoreAction)
+            event.accept()
+        else:
+            event.ignore()
+
     def add_gpu(self, gpu_data):
         gpu_item = QTreeWidgetItem(self.grp_graphics, [gpu_data.get("name")])
         gpu_item.setData(0, Qt.ItemDataRole.UserRole, {"type": "gpu", "hw": gpu_data})

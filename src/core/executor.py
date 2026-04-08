@@ -2,7 +2,6 @@ import subprocess
 import os
 import stat
 from PyQt6.QtWidgets import QMessageBox
-from PyQt6.QtWidgets import QMessageBox
 
 from src.core.loginctl_api import get_current_assignments
 
@@ -14,7 +13,9 @@ class ConfigExecutor:
         
     def _get_target_path(self, hw_data):
         # GPUs should attach by their base PCI path to absorb both video and audio components
-        if hw_data.get("type") == "graphics" and hw_data.get("pci_syspath"):
+        # Also handles 'gpu' type from UI and 'graphics' type from raw scanner
+        hw_type = hw_data.get("type")
+        if hw_type in ["graphics", "gpu"] and hw_data.get("pci_syspath"):
             return hw_data.get("pci_syspath")
         return hw_data.get("syspath")
 
@@ -42,7 +43,19 @@ class ConfigExecutor:
                     dev_name = hw.get("name", "Unknown Device")
                     devpath = target_path[4:] if target_path.startswith("/sys") else target_path
                     udev_rules.append(f"# {dev_name}")
-                    udev_rules.append(f'TAG=="seat", DEVPATH=="{devpath}", ENV{{ID_SEAT}}="{seat_name}"')
+
+                    hw_type = hw.get("type", "")
+
+                    # If this is a GPU using a PCI syspath, we must explicitly tag related subsystems
+                    # to ensure DRM, fb, and sound cards under this PCI bus are assigned to the seat.
+                    if hw_type in ["graphics", "gpu"] and hw.get("pci_syspath"):
+                        udev_rules.append(f'TAG=="seat", DEVPATH=="{devpath}", ENV{{ID_SEAT}}="{seat_name}"')
+                        # Catch children for drm, graphics and sound
+                        udev_rules.append(f'TAG=="seat", DEVPATH=="{devpath}/*", SUBSYSTEM=="drm", ENV{{ID_SEAT}}="{seat_name}"')
+                        udev_rules.append(f'TAG=="seat", DEVPATH=="{devpath}/*", SUBSYSTEM=="graphics", ENV{{ID_SEAT}}="{seat_name}"')
+                        udev_rules.append(f'TAG=="seat", DEVPATH=="{devpath}/*", SUBSYSTEM=="sound", ENV{{ID_SEAT}}="{seat_name}"')
+                    else:
+                        udev_rules.append(f'TAG=="seat", DEVPATH=="{devpath}", ENV{{ID_SEAT}}="{seat_name}"')
 
         os.makedirs(self.staging_dir, exist_ok=True)
         
