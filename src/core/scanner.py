@@ -8,8 +8,33 @@ class HardwareScanner:
     def __init__(self, config_manager=None):
         self.config = config_manager or ConfigManager()
 
+    def _get_udev_property(self, syspath, property_name):
+        """Queries udevadm to extract a specific property from a device syspath."""
+        try:
+            res = subprocess.run(["udevadm", "info", "--query=property", "--path", syspath], 
+                                 capture_output=True, text=True, check=True)
+            for line in res.stdout.splitlines():
+                if line.startswith(f"{property_name}="):
+                    return line.split("=", 1)[1].strip()
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
+        return None
+
     def _get_persistent_id(self, syspath):
-        """Generates a stable identifier based on sysfs physical topology."""
+        """
+        Generates a stable identifier based on udev ID_PATH or ID_SERIAL.
+        Falls back to sysfs physical topology if udev fails.
+        """
+        # ID_PATH (physical port) is best for desk-centric setups
+        id_path = self._get_udev_property(syspath, "ID_PATH")
+        if id_path:
+            return f"path:{id_path}"
+            
+        # ID_SERIAL is good for specific high-end peripherals
+        id_serial = self._get_udev_property(syspath, "ID_SERIAL")
+        if id_serial:
+            return f"serial:{id_serial}"
+
         # Syspaths under /sys/devices/ are usually stable across reboots based on the bus topology
         if syspath.startswith("/sys/devices/"):
             return syspath[len("/sys/devices/"):]
@@ -249,18 +274,22 @@ class HardwareScanner:
                             status = "unknown"
                             
                         if status == "connected":
-                            monitor_name = f"Display {connector.split('-', 1)[1]}"
+                            # Use connector name (e.g., DP-1) as a stable identifier part
+                            connector_id = connector.split('-', 1)[1]
+                            monitor_name = f"Display {connector_id}"
+                            
                             edid_path = os.path.join(connector_path, "edid")
                             try:
                                 with open(edid_path, "rb") as f:
                                     edid_name = self._decode_edid(f.read())
                                     if edid_name:
-                                        monitor_name = edid_name
+                                        # Use both EDID name and connector ID to ensure uniqueness
+                                        monitor_name = f"{edid_name} ({connector_id})"
                             except (FileNotFoundError, PermissionError):
                                 pass
                                 
                             conn_syspath = os.path.realpath(connector_path)
-                            conn_persistent_id = self._get_persistent_id(conn_syspath)
+                            conn_persistent_id = f"{persistent_id}/{connector_id}" # Stable hierarchy
                             conn_alias = self.config.get_alias(conn_persistent_id)
                             
                             gpu_info["monitors"].append({
@@ -268,7 +297,7 @@ class HardwareScanner:
                                 "persistent_id": conn_persistent_id,
                                 "name": conn_alias if conn_alias else monitor_name,
                                 "type": "monitor",
-                                "connector": connector.split('-', 1)[1]
+                                "connector": connector_id
                             })
                 gpus.append(gpu_info)
         return gpus
@@ -317,15 +346,16 @@ class HardwareScanner:
                     for chunk in key_str.split():
                         key_count += bin(int(chunk, 16)).count("1")
 
-                # Strict Input constraints: Must be a mouse (REL/ABS) or have >5 actual keys to be a "Keyboard"
+                # Input constraints: Relaxed to catch macro pads and foot pedals
                 is_valid = False
                 if has_rel or has_abs:
                     is_valid = True
-                elif key_count > 5:
+                elif key_count > 1: # Reduced from 5 to catch macro pads
                     is_valid = True
                 
                 name_l = device_name.lower()
-                if "hdmi" in name_l or "dp" in name_l or "power button" in name_l:
+                # Still filter out noisy power buttons and internal HDMI/DP event nodes
+                if "hdmi" in name_l or "dp" in name_l or "power button" in name_l or "vga" in name_l:
                     is_valid = False
                     
                 if not is_valid:

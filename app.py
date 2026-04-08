@@ -44,7 +44,7 @@ class MultiseatLauncher(QMainWindow):
         )
         summary_label = QLabel(summary_text)
         summary_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        summary_label.setStyleSheet("font-size: 14px; margin: 15px;")
+        summary_label.setStyleSheet("font-size: 10pt; line-height: 1.4; margin: 15px;")
         layout.addWidget(summary_label)
 
         # Buttons
@@ -52,12 +52,12 @@ class MultiseatLauncher(QMainWindow):
         
         self.btn_express = QPushButton("Start Express Setup")
         self.btn_express.setMinimumHeight(50)
-        self.btn_express.setStyleSheet("font-size: 14px; font-weight: bold; background-color: #2b579a; color: white;")
+        self.btn_express.setStyleSheet("font-size: 14pt; font-weight: bold; background-color: #2b579a; color: white;")
         self.btn_express.clicked.connect(self.start_express)
 
         self.btn_advanced = QPushButton("Advanced Manual Setup")
         self.btn_advanced.setMinimumHeight(50)
-        self.btn_advanced.setStyleSheet("font-size: 14px;")
+        self.btn_advanced.setStyleSheet("font-size: 14pt; font-weight: bold;")
         self.btn_advanced.clicked.connect(self.start_advanced)
 
         btn_layout.addWidget(self.btn_express)

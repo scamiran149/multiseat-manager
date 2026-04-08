@@ -1,10 +1,10 @@
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QLabel, 
     QTreeWidget, QTreeWidgetItem, QScrollArea, QAbstractItemView, QPushButton,
-    QTreeWidgetItemIterator
+    QTreeWidgetItemIterator, QMenu
 )
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QAction
 
 from src.core.input_listener import InputListenerThread
 from src.ui.display_overlay import OverlayManager
@@ -13,14 +13,17 @@ from src.core.backup import save_configuration, load_configuration
 from src.ui.review_dialog import ReviewDialog
 
 class DraggableTree(QTreeWidget):
-    def __init__(self, title):
+    def __init__(self, title, main_window=None):
         super().__init__()
+        self.main_window = main_window
         self.setHeaderLabel(title)
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
         self.setDropIndicatorShown(True)
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.show_context_menu)
         
         self.grp_graphics = QTreeWidgetItem(self, ["🖥️ Graphics & Displays"])
         self.grp_graphics.setFlags(self.grp_graphics.flags() & ~Qt.ItemFlag.ItemIsDragEnabled & ~Qt.ItemFlag.ItemIsDropEnabled)
@@ -38,6 +41,81 @@ class DraggableTree(QTreeWidget):
         self.grp_av.setFlags(self.grp_av.flags() & ~Qt.ItemFlag.ItemIsDragEnabled & ~Qt.ItemFlag.ItemIsDropEnabled)
         self.grp_av.setExpanded(True)
 
+    def show_context_menu(self, pos):
+        item = self.itemAt(pos)
+        if not item or not item.parent():
+            return # Don't show menu for empty space or top-level group nodes
+            
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        if not data or not data.get("type"):
+            return
+            
+        hw_type = data.get("type")
+        hw_data = data.get("hw", {})
+        
+        # Only show menu for top-level draggable items
+        if hw_type not in ["gpu", "usb_hub", "usb_child", "input", "av"]:
+            return
+
+        menu = QMenu(self)
+        
+        if hw_type == "input":
+            restrict_action = QAction("Restrict Access (0600)", self)
+            restrict_action.setCheckable(True)
+            restrict_action.setChecked(hw_data.get("restrict_access", False))
+            restrict_action.triggered.connect(lambda checked, i=item, h=hw_data: self.toggle_restrict_access(i, h, checked))
+            menu.addAction(restrict_action)
+            menu.addSeparator()
+            
+        if self.main_window:
+            move_menu = menu.addMenu("Move to...")
+            for tree in self.main_window.get_all_trees():
+                target_seat = tree.headerItem().text(0)
+                # Don't show current seat
+                if target_seat == self.headerItem().text(0):
+                    continue
+                    
+                action = QAction(target_seat, self)
+                action.triggered.connect(lambda checked, tgt=tree, i=item: self.move_item_to_tree(i, tgt))
+                move_menu.addAction(action)
+
+        menu.exec(self.mapToGlobal(pos))
+        
+    def toggle_restrict_access(self, item, hw_data, is_restricted):
+        hw_data["restrict_access"] = is_restricted
+        
+        # Explicitly update the item data to ensure changes persist (avoids copy issues)
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        if data:
+            data["hw"] = hw_data
+            item.setData(0, Qt.ItemDataRole.UserRole, data)
+
+        current_text = item.text(0)
+        if is_restricted and not current_text.endswith(" 🔒"):
+            item.setText(0, f"{current_text} 🔒")
+        elif not is_restricted and current_text.endswith(" 🔒"):
+            item.setText(0, current_text[:-2])
+            
+    def move_item_to_tree(self, item, target_tree):
+        source_parent = item.parent()
+        if not source_parent:
+            return
+            
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        hw_type = data.get("type")
+        
+        target_group = {
+            "gpu": target_tree.grp_graphics,
+            "usb_hub": target_tree.grp_usb,
+            "usb_child": target_tree.grp_usb,
+            "input": target_tree.grp_inputs,
+            "av": target_tree.grp_av,
+        }.get(hw_type)
+        
+        if target_group:
+            index = source_parent.indexOfChild(item)
+            taken_item = source_parent.takeChild(index)
+            target_group.addChild(taken_item)
 
     def dropEvent(self, event):
         source = event.source()
@@ -156,7 +234,7 @@ class AdvancedSetupWindow(QMainWindow):
         self.setCentralWidget(central_widget)
         main_layout = QHBoxLayout(central_widget)
 
-        self.seat0_tree = DraggableTree("seat0 (Master)")
+        self.seat0_tree = DraggableTree("seat0 (Master)", main_window=self)
         self._populate_initial_hardware(self.seat0_tree)
         
         seat0_layout = QVBoxLayout()
@@ -195,7 +273,7 @@ class AdvancedSetupWindow(QMainWindow):
         self.btn_identify_inp.clicked.connect(self.toggle_input_listener)
         
         btn_apply = QPushButton("Apply Configuration")
-        btn_apply.setStyleSheet("background-color: #2b579a; color: white; padding: 10px;")
+        btn_apply.setStyleSheet("background-color: #2b579a; color: white; font-weight: bold; padding: 10px;")
         btn_apply.clicked.connect(self.apply_configuration)
         
         btn_save = QPushButton("Save Config...")
@@ -244,6 +322,14 @@ class AdvancedSetupWindow(QMainWindow):
             if not target_tree:
                 continue
                 
+            # Normalize identifiers to strings (they could be dicts from wizard/load or strings from live_mapping)
+            normalized_ids = []
+            for ident in identifiers:
+                if isinstance(ident, dict):
+                    normalized_ids.append(ident.get("id") or ident.get("persistent_id") or ident.get("syspath"))
+                elif isinstance(ident, str):
+                    normalized_ids.append(ident)
+                
             items_to_move = []
             
             def find_matching_items(parent_item):
@@ -255,20 +341,40 @@ class AdvancedSetupWindow(QMainWindow):
                     pci_syspath = hw_data.get("pci_syspath")
                     
                     match = False
-                    if pid in identifiers or syspath in identifiers or pci_syspath in identifiers:
-                        match = True
-                    elif syspath:
-                        for ident in identifiers:
-                            if ident.startswith(syspath) or syspath.startswith(ident):
-                                match = True
-                                break
-                    elif pci_syspath:
-                        for ident in identifiers:
-                            if ident.startswith(pci_syspath) or pci_syspath.startswith(ident):
-                                match = True
-                                break
+                    matched_ident_obj = None
+                    for ident in identifiers:
+                        # Extract string value for matching
+                        ident_str = ""
+                        if isinstance(ident, dict):
+                            ident_str = ident.get("id") or ident.get("persistent_id") or ident.get("syspath")
+                        elif isinstance(ident, str):
+                            ident_str = ident
+                            
+                        if not ident_str:
+                            continue
+                            
+                        if pid == ident_str or syspath == ident_str or pci_syspath == ident_str:
+                            match = True
+                            matched_ident_obj = ident
+                            break
+                        if syspath and (ident_str.startswith(syspath) or syspath.startswith(ident_str)):
+                            match = True
+                            matched_ident_obj = ident
+                            break
+                        if pci_syspath and (ident_str.startswith(pci_syspath) or pci_syspath.startswith(ident_str)):
+                            match = True
+                            matched_ident_obj = ident
+                            break
+                        if pid and (pid.endswith(ident_str) or ident_str.endswith(pid)):
+                            match = True
+                            matched_ident_obj = ident
+                            break
                                 
                     if match:
+                        # Restore restrict_access state if it came from a profile load
+                        if isinstance(matched_ident_obj, dict) and matched_ident_obj.get("restrict_access"):
+                            target_tree.toggle_restrict_access(child, hw_data, True)
+                            
                         items_to_move.append((parent_item, child, target_tree))
                     else:
                         find_matching_items(child)
@@ -360,11 +466,18 @@ class AdvancedSetupWindow(QMainWindow):
                 
             staging_map[seat_name] = []
             
-            # Extract top-level items assigned to this seat
+            def extract_hw(parent_item):
+                for i in range(parent_item.childCount()):
+                    child = parent_item.child(i)
+                    data = child.data(0, Qt.ItemDataRole.UserRole)
+                    if data and data.get("type") in ["gpu", "usb_hub", "usb_child", "input", "av"]:
+                        staging_map[seat_name].append(data.get("hw", {}))
+                    # Recurse to find nested top-level types (like usb_child under usb_hub)
+                    extract_hw(child)
+
+            # Extract from all groups in this tree
             for grp in [tree.grp_graphics, tree.grp_inputs, tree.grp_av, tree.grp_usb]:
-                for i in range(grp.childCount()):
-                    hw_data = grp.child(i).data(0, Qt.ItemDataRole.UserRole).get("hw", {})
-                    staging_map[seat_name].append(hw_data)
+                extract_hw(grp)
                     
         executor = ConfigExecutor(parent_widget=self)
         staging_dir = executor.generate_staging(staging_map)
@@ -415,7 +528,7 @@ class AdvancedSetupWindow(QMainWindow):
         seat_layout = QVBoxLayout(seat_container)
         seat_layout.setContentsMargins(0, 0, 0, 0)
         
-        new_seat = DraggableTree(name)
+        new_seat = DraggableTree(name, main_window=self)
         seat_layout.addWidget(new_seat)
         
         btn_clear = QPushButton("Clear Seat")

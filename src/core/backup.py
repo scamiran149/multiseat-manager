@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import QFileDialog, QMessageBox
 def save_configuration(parent_widget, staging_map):
     """
     Serializes a seat mapping dict into a saveable JSON config file.
-    Only stores the permanent IDs of the mapped devices.
+    Stores the permanent IDs and metadata like restrict_access.
     """
     export_data = {}
     for seat, hw_list in staging_map.items():
@@ -14,7 +14,10 @@ def save_configuration(parent_widget, staging_map):
             # Prefer persistent string matching where possible over syspath which can fluctuate on reboot
             ident = hw.get("persistent_id") or hw.get("syspath")
             if ident:
-                export_data[seat].append(ident)
+                export_item = {"id": ident}
+                if hw.get("restrict_access"):
+                    export_item["restrict_access"] = True
+                export_data[seat].append(export_item)
                 
     file_path, _ = QFileDialog.getSaveFileName(
         parent_widget, 
@@ -38,7 +41,8 @@ def save_configuration(parent_widget, staging_map):
 def load_configuration(parent_widget):
     """
     Prompts user for a JSON file, deserializes it, 
-    and returns a mapping dictionary ready for apply_mapping()
+    and returns a mapping dictionary ready for apply_mapping().
+    Handles both legacy (list of strings) and new (list of dicts) formats.
     """
     file_path, _ = QFileDialog.getOpenFileName(
         parent_widget, 
@@ -52,7 +56,18 @@ def load_configuration(parent_widget):
     try:
         with open(file_path, "r") as f:
             mapping = json.load(f)
-        return mapping
+            
+        # Normalize legacy array of strings into array of dicts
+        normalized_mapping = {}
+        for seat, items in mapping.items():
+            normalized_mapping[seat] = []
+            for item in items:
+                if isinstance(item, str):
+                    normalized_mapping[seat].append({"id": item})
+                elif isinstance(item, dict):
+                    normalized_mapping[seat].append(item)
+                    
+        return normalized_mapping
     except Exception as e:
         QMessageBox.critical(parent_widget, "Load Error", f"Failed to load profile:\n{str(e)}")
         return None

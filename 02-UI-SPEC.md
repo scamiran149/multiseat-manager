@@ -20,8 +20,8 @@ The application uses a clean, modern desktop aesthetic leveraging standard PyQt6
 
 ### Typography
 - **Title (Wizard/Main):** 20pt Bold, System Default
-- **Heading (Columns):** 14pt Semi-bold, System Default
-- **Body (Labels/Lists):** 10pt Regular, System Default
+- **Heading (Columns):** 14pt Bold, System Default
+- **Body (Labels/Lists):** 10pt Regular, System Default, 1.4 line-height
 - **Monospace (Review):** 10pt "Monospace" or "Courier New"
   - *Used for: `review_dialog.py` text edit.*
 
@@ -46,6 +46,7 @@ The application uses a clean, modern desktop aesthetic leveraging standard PyQt6
 
 ### Navigation Structure
 - **Primary:** `AdvancedSetupWindow` (Main Entry)
+  - **Focal Point:** "Apply Configuration" button (Bottom Right).
 - **Secondary:** `ExpressSetupWizard` (Triggered from Main)
 - **Overlays:** `DisplayOverlay` (Frameless, translucent white on blue)
 
@@ -98,11 +99,14 @@ The application uses a clean, modern desktop aesthetic leveraging standard PyQt6
 |---------|--------|---------|
 | Wizard Intro | "This wizard will help you configure additional seats." | Orientation |
 | Wizard Final | "Everything not assigned to a secondary seat will remain on seat0 (Master)." | Confirmation |
-| Main Window CTA | "Apply Configuration" | Primary Action |
+| Main Window CTA | "Apply Configuration" | Primary Action (Focal Point) |
 | Input Listener | "Listening... (Press a key/button on the physical device)" | Instruction |
 | Success State | "Configuration applied successfully! Please reboot or restart your session." | Feedback |
 | Empty State | "Pending Hardware Selection..." | Placeholder |
 | Review Dialog | "Install Now (sudo)" | Destructive/Critical Action |
+| Error State | "Configuration failed. Please check hardware permissions and try again." | Error Feedback |
+| Destructive | "Discard Changes" | Replaces generic "Cancel" |
+| Wizard | "Stop Setup" | Replaces generic "Cancel" |
 
 ---
 

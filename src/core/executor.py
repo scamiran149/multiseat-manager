@@ -58,12 +58,20 @@ class ConfigExecutor:
 
                 if seat_name != "seat0":
                     dev_name = hw.get("name", "Unknown Device")
+                    # In some mock testing cases, target_path might be short. Ensure it drops /sys but works either way.
                     devpath = target_path[4:] if target_path.startswith("/sys") else target_path
+                    if not devpath.startswith("/"):
+                        devpath = "/" + devpath
+                        
                     udev_rules.append(f"# {dev_name}")
 
                     hw_type = hw.get("type", "")
 
-                    udev_rules.append(f'TAG=="seat", DEVPATH=="{devpath}", ENV{{ID_SEAT}}="{seat_name}"')
+                    mode_str = ""
+                    if hw.get("restrict_access"):
+                        mode_str = ', MODE="0600"'
+
+                    udev_rules.append(f'TAG=="seat", DEVPATH=="{devpath}", ENV{{ID_SEAT}}="{seat_name}"{mode_str}')
 
                     # If this is a GPU using a PCI syspath, we must explicitly tag related subsystems
                     # to ensure DRM, fb, and sound cards under this PCI bus are assigned to the seat.

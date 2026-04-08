@@ -86,8 +86,9 @@ class SeatSetupPage(QWizardPage):
         if not gpu_id:
             return
             
-        if gpu_id not in self.assignments:
-            self.assignments.append(gpu_id)
+        gpu_data = next((g for g in self.hardware_data.get("graphics", []) if g.get("persistent_id") == gpu_id), None)
+        if gpu_data and not any(a.get("persistent_id") == gpu_id for a in self.assignments):
+            self.assignments.append(gpu_data)
             if self.assigned_list.item(0) and "Pending" in self.assigned_list.item(0).text():
                 self.assigned_list.takeItem(0)
             self.assigned_list.addItem(self.gpu_combo.currentText())
@@ -104,13 +105,15 @@ class SeatSetupPage(QWizardPage):
     def on_device_identified(self, persistent_id):
         self.stop_listening()
         dev_name = persistent_id
+        inp_data = None
         for inp in self.hardware_data.get("inputs", []):
             if inp.get("persistent_id") == persistent_id:
                 dev_name = inp.get("name")
+                inp_data = inp
                 break
                 
-        if persistent_id not in self.assignments:
-            self.assignments.append(persistent_id)
+        if inp_data and not any(a.get("persistent_id") == persistent_id for a in self.assignments):
+            self.assignments.append(inp_data)
             if self.assigned_list.item(0) and "Pending" in self.assigned_list.item(0).text():
                 self.assigned_list.takeItem(0)
             self.assigned_list.addItem(dev_name)
@@ -149,17 +152,13 @@ class ExpressSetupWizard(QWizard):
         self.hardware_data = hardware_data
         self.setWindowTitle("Multiseat Express Setup")
         self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
+        self.setButtonText(QWizard.WizardButton.CancelButton, "Stop Setup")
         
         self.intro_page = IntroPage(self.hardware_data)
-        self.addPage(self.intro_page)
+        self.intro_page_id = self.addPage(self.intro_page)
         
-        # Dynamic pages based on number of seats
-        # For simplicity in this UI skeleton, we'll pre-add a fixed number and show/hide or 
-        # generate them dynamically during page transitions.
-        # But QWizard makes it tricky to dynamically branch based on spinbox unless we use nextId()
-        # For now, we will just use a setup allowing up to 2 dynamic seats in this stub.
         self.seat_pages = []
-        for i in range(1, 4):
+        for i in range(1, 11):
             page = SeatSetupPage(i, self.hardware_data)
             self.seat_pages.append(self.addPage(page))
             
@@ -180,17 +179,17 @@ class ExpressSetupWizard(QWizard):
 
     def nextId(self):
         curr = self.currentId()
-        if curr == 0:
+        if curr == self.intro_page_id:
             count = self.field("seat_count")
             if count > 0:
-                return 1
+                return self.seat_pages[0]
             return self.final_page_id
             
-        # If we are on a seat page (1-3)
-        if 1 <= curr <= 3:
+        if curr in self.seat_pages:
+            idx = self.seat_pages.index(curr)
             count = self.field("seat_count")
-            if curr < count:
-                return curr + 1
+            if idx + 1 < count:
+                return self.seat_pages[idx + 1]
             return self.final_page_id
             
         return super().nextId()

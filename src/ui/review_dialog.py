@@ -41,7 +41,7 @@ class ReviewDialog(QDialog):
         btn_open_folder = QPushButton("Open Staging Folder")
         btn_open_folder.clicked.connect(self.open_folder)
 
-        btn_cancel = QPushButton("Cancel")
+        btn_cancel = QPushButton("Discard Changes")
         btn_cancel.clicked.connect(self.reject)
 
         btn_install = QPushButton("Install Now (sudo)")
